@@ -4,43 +4,43 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"lanc/models"
+	"lanc/dto"
 	"net/http"
 )
 
 const apiBaseUrl = "https://lobste.rs"
 
-func getHottest(n int) ([]models.ShortPost, error) {
+func getHottest(pageNum int) ([]dto.ShortPost, error) {
 	endpoint := "/hottest.json"
-	if n > 1 {
-		endpoint = fmt.Sprintf("/page/%d.json", n)
+	if pageNum > 1 {
+		endpoint = fmt.Sprintf("/page/%d.json", pageNum)
 	}
-	return getUnified[[]models.ShortPost](endpoint)
+	return getUnified[[]dto.ShortPost](endpoint)
 }
 
-func getNewest(n int) ([]models.ShortPost, error) {
-	if n < 1 {
-		n = 1
+func getNewest(pageNum int) ([]dto.ShortPost, error) {
+	if pageNum < 1 {
+		pageNum = 1
 	}
-	endpoint := fmt.Sprintf("/newest/page/%d.json", n)
-	return getUnified[[]models.ShortPost](endpoint)
+	endpoint := fmt.Sprintf("/newest/page/%d.json", pageNum)
+	return getUnified[[]dto.ShortPost](endpoint)
 }
 
-func getPost(shortId string) (models.Post, error) {
+func getPost(shortId string) (dto.Post, error) {
 	endpoint := "/s/" + shortId + ".json"
-	return getUnified[models.Post](endpoint)
+	return getUnified[dto.Post](endpoint)
 }
-
-var k int = 0
 
 func getUnified[T any](endpoint string) (T, error) {
-	var post T
+	var post T // -> post := zero
 	res, err := get(endpoint)
 	if err != nil {
 		return post, err
 	}
 	dec := json.NewDecoder(res)
-	dec.Decode(&post)
+	if err = dec.Decode(&post); err != nil {
+		return post, err
+	}
 	return post, nil
 }
 

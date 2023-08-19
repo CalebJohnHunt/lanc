@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"lanc/models"
+	"lanc/dto"
 	"os"
 	"strings"
 
@@ -13,7 +13,7 @@ import (
 
 type SinglePost struct {
 	shortId     string
-	post        models.Post
+	post        dto.Post
 	doneLoading bool
 }
 
@@ -36,9 +36,9 @@ func (s *SinglePost) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "w":
 			f, _ := os.OpenFile("log", os.O_APPEND|os.O_CREATE, os.FileMode(0o777))
 			defer f.Close()
-			f.Write([]byte(fmt.Sprintf("%v", s.post)))
+			_, _ = f.Write([]byte(fmt.Sprintf("%v", s.post)))
 		}
-	case models.Post:
+	case dto.Post:
 		s.post = msg
 		s.doneLoading = true
 	case error:
@@ -90,8 +90,8 @@ func (s *SinglePost) View() string {
 			}()] + "..."))
 		// Render(comment.CommentPlain))
 		sb.WriteByte('\n')
-		f.WriteString(text)
-		f.Write([]byte{'\n'})
+		_, _ = f.WriteString(text)
+		_, _ =f.Write([]byte{'\n'})
 	}
 
 	return sb.String()

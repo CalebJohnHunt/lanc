@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"lanc/models"
+	"lanc/dto"
 	"strings"
 
 	"github.com/CalebJohnHunt/stacker"
@@ -10,13 +10,14 @@ import (
 )
 
 type HottestPosts struct {
-	posts            []models.ShortPost
+	posts            []dto.ShortPost
+	curPage          int
 	hoveredPostIndex int
 }
 
 func (h *HottestPosts) Init() tea.Cmd {
 	return func() tea.Msg {
-		posts, err := getHottest(0)
+		posts, err := getHottest(h.curPage)
 		if err != nil {
 			return err
 		}
@@ -39,7 +40,7 @@ func (h *HottestPosts) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case error:
 		fmt.Println(msg)
-	case []models.ShortPost:
+	case []dto.ShortPost:
 		h.posts = msg
 	}
 	return h, nil

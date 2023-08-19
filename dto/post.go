@@ -1,4 +1,4 @@
-package models
+package dto
 
 // Post without comments
 // (seen on link aggregation pages)
