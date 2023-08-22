@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"lanc/dto"
-	"os"
+	"math"
 	"strings"
 
 	"github.com/CalebJohnHunt/stacker"
@@ -12,12 +12,22 @@ import (
 )
 
 type SinglePost struct {
-	shortId     string
-	post        dto.Post
-	doneLoading bool
+	shortId           string
+	post              dto.Post
+	doneLoading       bool
+	selectedComment   int
+	collapsedComments map[int]bool
+	// Comments hidden due to their ancestor being collapsed.
+	hiddenComments map[int]bool
 }
 
 func (s *SinglePost) Init() tea.Cmd {
+	if s.collapsedComments == nil {
+		s.collapsedComments = map[int]bool{}
+	}
+	if s.hiddenComments == nil {
+		s.hiddenComments = map[int]bool{}
+	}
 	return func() tea.Msg {
 		m, err := getPost(s.shortId)
 		if err != nil {
@@ -33,10 +43,35 @@ func (s *SinglePost) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "esc":
 			return s, stacker.PopScene()
-		case "w":
-			f, _ := os.OpenFile("log", os.O_APPEND|os.O_CREATE, os.FileMode(0o777))
-			defer f.Close()
-			_, _ = f.Write([]byte(fmt.Sprintf("%v", s.post)))
+		case "j":
+			for i := s.selectedComment + 1; i < len(s.post.Comments); i++ {
+				if !s.hiddenComments[i] {
+					s.selectedComment = i
+					break
+				}
+			}
+		case "k":
+			for i := s.selectedComment - 1; i >= 0; i-- {
+				if !s.hiddenComments[i] {
+					s.selectedComment = i
+					break
+				}
+			}
+		case "enter", "l", "h":
+			s.collapsedComments[s.selectedComment] = !s.collapsedComments[s.selectedComment]
+			for i := s.selectedComment + 1; i < len(s.post.Comments); i++ {
+				if s.post.Comments[i].IndentLevel <= s.post.Comments[s.selectedComment].IndentLevel {
+					break
+				}
+				s.hiddenComments[i] = s.collapsedComments[s.selectedComment]
+				// I'm a comment. If I'm collapsed but I've just become unhidden, I don't want my children to become unhidden.
+				if !s.hiddenComments[i] && s.collapsedComments[i] {
+					j := i + 1
+					for ; j < len(s.post.Comments) && s.post.Comments[j].IndentLevel > s.post.Comments[i].IndentLevel; j++ {
+						i = j
+					}
+				}
+			}
 		}
 	case dto.Post:
 		s.post = msg
@@ -49,13 +84,8 @@ func (s *SinglePost) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 var (
-	descriptionStyle                  = lipgloss.NewStyle().Border(lipgloss.DoubleBorder())
-	titleStyle                        = lipgloss.NewStyle().Border(lipgloss.DoubleBorder())
-	commentStyles    []lipgloss.Style = []lipgloss.Style{
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#f00")),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#0f0")),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#00f")),
-	}
+	descriptionStyle = lipgloss.NewStyle().Border(lipgloss.DoubleBorder())
+	titleStyle       = lipgloss.NewStyle().Border(lipgloss.DoubleBorder())
 )
 
 func (s *SinglePost) View() string {
@@ -69,30 +99,50 @@ func (s *SinglePost) View() string {
 		sb.WriteString(descriptionStyle.Render(s.post.DescriptionPlain))
 		sb.WriteByte('\n')
 	}
+	sb.WriteString(titleStyle.Render(s.post.CommentsURL))
+	sb.WriteByte('\n')
 	sb.WriteString(titleStyle.Render(s.post.URL))
 	sb.WriteByte('\n')
 
-	f, _ := os.OpenFile("log", os.O_APPEND|os.O_CREATE, os.FileMode(0o777))
-	defer f.Close()
+	s.renderComments(&sb)
 
+	return wrapper.Render(sb.String())
+}
+
+func (s *SinglePost) renderComments(sb *strings.Builder) {
+	skipIndentedMoreThanThis := math.MaxInt
 	for i, comment := range s.post.Comments {
+		if comment.IndentLevel > skipIndentedMoreThanThis {
+			continue
+		}
+		skipIndentedMoreThanThis = math.MaxInt
+		if s.collapsedComments[i] {
+			skipIndentedMoreThanThis = comment.IndentLevel
+		}
 		text := strings.ReplaceAll(comment.CommentPlain, "\r", "")
-		// text := strings.ReplaceAll(comment.CommentPlain, "\n", "")
-		sb.WriteString(commentStyles[i%len(commentStyles)].
-			Width(100).
-			Border(lipgloss.NormalBorder()).
-			PaddingLeft(comment.IndentLevel * 2).
-			Render(text[:func() int {
-				if 50 < len(text) {
-					return 50
-				}
-				return len(text)
-			}()] + "..."))
-		// Render(comment.CommentPlain))
-		sb.WriteByte('\n')
-		_, _ = f.WriteString(text)
-		_, _ =f.Write([]byte{'\n'})
-	}
+		collapsed := "-"
+		if s.collapsedComments[i] {
+			collapsed = "+"
+		}
+		if i == s.selectedComment {
+			collapsed = lipgloss.NewStyle().Background(lipgloss.Color("#ffffff")).Foreground(lipgloss.Color("#000000")).Render(collapsed)
+		}
 
-	return sb.String()
+		sb.WriteString(fmt.Sprintf("%s[%s] [%d] %s (%s) (%s)\n",
+			strings.Repeat("  ", comment.IndentLevel-1),
+			collapsed,
+			comment.Score,
+			comment.CommentingUser.Username,
+			comment.CreatedAt.Format("2006-01-02 03:04PM"),
+			comment.ShortIDURL))
+		if !s.collapsedComments[i] {
+			sb.WriteString(lipgloss.JoinHorizontal(
+				lipgloss.Top,
+				"  ",
+				strings.Repeat("  ", comment.IndentLevel),
+				wrapper.Copy().Width(wrapper.GetWidth()-(comment.IndentLevel-1)*2-4).Render(text)))
+
+			sb.WriteByte('\n')
+		}
+	}
 }

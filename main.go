@@ -28,5 +28,5 @@ func (b *base) View() string {
 
 func main() {
 	st := stacker.NewStacker(&HottestPosts{})
-	tea.NewProgram(&base{st}, tea.WithAltScreen()).Run()
+	_, _ = tea.NewProgram(&base{st}, tea.WithAltScreen()).Run()
 }
